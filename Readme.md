@@ -66,3 +66,8 @@ Clone the repository
 ```bash
 git clone https://github.com/yourusername/iconiq-shot.git
 cd iconiq-shot
+
+## To Build Application
+
+```bash
+python -m PyInstaller --onefile --windowed --icon=favicon.ico --name=IconiqShot main.py
