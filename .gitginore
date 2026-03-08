@@ -1,0 +1,9 @@
+# Ignore printsetup.exe
+printsetup.exe
+
+# Ignore all files inside build/ and dist/
+.vscode/
+__pycache__/
+build/
+dist/
+Output/
