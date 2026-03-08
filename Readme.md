@@ -64,7 +64,7 @@ Download the latest version from the releases page.
 Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/iconiq-shot.git
+git clone https://github.com/astrogeeksagar/iconiqshot
 cd iconiq-shot
 
 ## To Build Application

@@ -2,14 +2,33 @@ import tkinter as tk
 from tkinter import messagebox
 import threading
 import os
+import sys
 from datetime import datetime
+
+import pystray
+from PIL import Image as PILImage
 
 from overlay import CaptureOverlay
 from ocr_engine import OCREngine
 
 
+def _get_base_path():
+    """Resolve base path for both dev and PyInstaller frozen builds."""
+    if getattr(sys, "frozen", False):
+        return sys._MEIPASS
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _get_icon_path():
+    return os.path.join(_get_base_path(), "favicon.ico")
+
+
+def _get_tray_icon_path():
+    return os.path.join(_get_base_path(), "assets", "tray_icon.png")
+
+
 class IconiqShot:
-    """Iconiq Shot — Lightshot-style screen text capture utility."""
+    """Iconiq Shot — Lightshot-style screen text capture utility with system tray."""
 
     # ── Theme ──
     _BG = "#1c1c2b"
@@ -33,14 +52,22 @@ class IconiqShot:
         self.root.geometry("580x480")
         self.root.minsize(480, 400)
         self.root.configure(bg=self._BG)
-        self.root.protocol("WM_DELETE_WINDOW", self._quit)
+        self.root.protocol("WM_DELETE_WINDOW", self._minimize_to_tray)
+
+        # Set window icon
+        icon_path = _get_icon_path()
+        if os.path.isfile(icon_path):
+            self.root.iconbitmap(icon_path)
 
         self.ocr = OCREngine()
         self._captured_image = None
         self._result_visible = False
+        self._tray_icon = None
+        self._tray_thread = None
 
         self._build_ui()
         self._center_window()
+        self._setup_tray()
 
     # ── Landing UI ──
 
@@ -332,7 +359,62 @@ class IconiqShot:
         self._show_landing()
         self._set_status("Ready")
 
+    # ── System Tray ──────────────────────────────────────────────
+
+    def _setup_tray(self):
+        """Create the pystray icon (runs in a background thread)."""
+        tray_path = _get_tray_icon_path()
+        if os.path.isfile(tray_path):
+            tray_image = PILImage.open(tray_path)
+        else:
+            # Fallback to favicon.ico
+            ico_path = _get_icon_path()
+            if os.path.isfile(ico_path):
+                tray_image = PILImage.open(ico_path).resize((64, 64), PILImage.LANCZOS)
+            else:
+                tray_image = PILImage.new("RGB", (64, 64), self._ACCENT)
+
+        menu = pystray.Menu(
+            pystray.MenuItem("New Capture", self._tray_new_capture),
+            pystray.MenuItem("Show Window", self._tray_show, default=True),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Exit", self._tray_exit),
+        )
+        self._tray_icon = pystray.Icon(
+            "IconiqShot", tray_image, "Iconiq Shot", menu,
+        )
+        self._tray_thread = threading.Thread(
+            target=self._tray_icon.run, daemon=True,
+        )
+        self._tray_thread.start()
+
+    def _minimize_to_tray(self):
+        """Hide window to tray instead of quitting."""
+        self.root.withdraw()
+
+    def _tray_show(self, icon=None, item=None):
+        """Restore the main window from tray."""
+        self.root.after(0, self._restore_window)
+
+    def _restore_window(self):
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+    def _tray_new_capture(self, icon=None, item=None):
+        """Start a new capture from the tray menu."""
+        self.root.after(0, self.start_capture)
+
+    def _tray_exit(self, icon=None, item=None):
+        """Fully quit the application."""
+        if self._tray_icon:
+            self._tray_icon.stop()
+        self.root.after(0, self.root.destroy)
+
     def _quit(self):
+        """Quit called from within the window (fallback)."""
+        if self._tray_icon:
+            self._tray_icon.stop()
         self.root.destroy()
 
     def run(self):
